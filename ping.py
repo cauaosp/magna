@@ -1,21 +1,12 @@
-import subprocess
-import time
-
-def ping_url(url, times):
-    command = ["ping", url, "-n", str(times)]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True)
-
-        if result.returncode == 0:
-            print("\nPing realizado com sucesso!")
-            print(result.stdout)
-        else:
-            print(f"Erro ao realizar o ping: {result.stderr}")
-    except Exception as e:
-        print(f"Ocorreu um erro: {e}")
-
+from utils import ping_printers, read_sheet
 
 if __name__ == "__main__":
-    while True:
-        ping_url("10.197.0.60", "5")
-        time.sleep(2)
+    excel_list = read_sheet("arquivo.xlsx")
+    broke_printers = []
+
+    for printer in excel_list:
+        result = ping_printers(printer)
+        if result is not None:
+            broke_printers.append(result)
+
+    print(broke_printers)
