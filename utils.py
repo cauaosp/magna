@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-def ping_printers(printer, broke_printers):
+def ping_printers(printer, broke_printers, time):
     command = ["ping", printer.get("IP"), "-n", "2"]
     try:
         ping_result = subprocess.run(command, capture_output=True, text=True, encoding='latin-1')
@@ -25,6 +25,9 @@ def ping_printers(printer, broke_printers):
             if printer not in broke_printers:
                 broke_printers.append(printer)
         
+        
+        printer["Horario"] = time
+        print(broke_printers)
         sender_email(broke_printers)
     except Exception as e:
         print(f"Ocorreu um erro: {e}")
@@ -62,6 +65,7 @@ def email_body_formater(broke_printers):
             <style>
                 table {
                     border-collapse: collapse;
+                    table-layout: fixed;
                 }
                 th, td {
                     border: 1px solid #ddd;
@@ -70,6 +74,7 @@ def email_body_formater(broke_printers):
                 }
                 th {
                     background-color: #f2f2f2;
+                    text-align: center;
                 }
                 pre {
                     white-space: pre-wrap; /* Preserva a formatação do texto */
@@ -93,7 +98,7 @@ def email_body_formater(broke_printers):
         <tr>
             <td>{printer.get('Nome da Impressora')}</td>
             <td>{printer.get('IP')}</td>
-            <td>{printer.get('Horário')}</td>
+            <td>{printer.get('Horario')}</td>
             <td><pre>{printer.get('Problema')}</pre></td>
         </tr>
         """
@@ -143,7 +148,7 @@ def schedule_ping_for_printers(excel_list, broke_printers):
         current_time = start_time
         while current_time <= end_time:
             time_str = current_time.strftime("%H:%M")
-            schedule.every().day.at(time_str).do(ping_printers, printer=printer, broke_printers=broke_printers)
+            schedule.every().day.at(time_str).do(ping_printers, printer=printer, broke_printers=broke_printers, time=time_str)
             print(f"Agendado para {printer['Nome da Impressora']} às {time_str}")
-            
-            current_time = (datetime.combine(datetime.today(), current_time) + timedelta(hours=1)).time()
+
+            current_time = (datetime.combine(datetime.today(), current_time) + timedelta(minutes=1)).time()
