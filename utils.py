@@ -17,60 +17,6 @@ def load_json_as_object():
 
 auth = load_json_as_object()
 
-def ping_printers(printer, broke_printers, time, num_packets=2):
-    command = ["ping", printer.get("IP"), "-n", "2"]
-    
-    sent = 0
-    received = 0
-    lost = 0
-
-    for _ in range(num_packets):
-        packet = IP(dst=printer.get("IP")) / ICMP() / b"Ping personalizado!"
-
-        response = sr1(packet, timeout=2, verbose=0)
-
-        sent += 1
-
-        if response:
-            received += 1
-        else:
-            lost += 1
-
-    if lost == 0:
-        if printer in broke_printers:
-            broke_printers.remove(printer)
-    else:
-        if printer not in broke_printers:
-            printer["Horario"] = time
-            printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
-            broke_printers.append(printer)
-    
-    sender_email(broke_printers)
-
-
-    # try:
-    #     ping_result = subprocess.run(command, capture_output=True, text=True, encoding='latin-1')
-
-    #     if ping_result.returncode == 0:
-    #         if "Host de destino inacessível" in ping_result.stdout or "Host de destino inacess¡vel" in ping_result.stdout:
-    #             printer["Problema"] = ping_result.stdout
-    #             if printer not in broke_printers:
-    #                 broke_printers.append(printer)
-    #         else:
-    #             if printer in broke_printers:
-    #                 broke_printers.remove(printer)
-    #     else:
-    #         printer["Problema"] = ping_result.stdout
-    #         if printer not in broke_printers:
-    #             broke_printers.append(printer)
-
-    #     printer["Horario"] = time
-    #     print(broke_printers)
-    #     # sender_email(broke_printers)
-    # except Exception as e:
-    #     print(f"Ocorreu um erro: {e}")
-    #     return None
-
 def read_sheet(file_path):
     wb = openpyxl.load_workbook(file_path)
     ws = wb.active
@@ -95,7 +41,7 @@ def load_email_config():
     email_config = data["email_smtp"]
     return email_config
 
-def email_body_formater(broke_printers):
+def html_content(broke_printers):
     table = """
     <html>
         <head>
@@ -193,10 +139,53 @@ def schedule_ping_for_printers(excel_list, broke_printers):
             current_time = (datetime.combine(datetime.today(), current_time) + timedelta(minutes=1)).time()
 
 def get_session_token():
-    response = requests.get(auth.glpi_api.requests.newSession, headers={
-        "Content-Type": "application/json",
-        "App-Token": auth.glpi_api.appToken,
-        "User-Token": auth.glpi_api.userToken
+    session = requests.Session()
+    session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
+    response = session.get(auth.glpi_api.requests.newSession, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "User-Token": auth.glpi_api.userToken})
+    return response.json()["session_token"]
+
+def create_new_ticket(body):
+    session = requests.Session()
+    session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
+    token = get_session_token()
+    respoonse = session.post(auth.glpi_api.requests.newTicket, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "Session-Token": token}, json={
+        "input": {
+            "name": "Problema com a impressora testando o MAGNA",
+            "content": html_content,
+            "status": 2,
+            "itilcategories_id": 128,
+            "locations_id": 393,
+            "entities_id": 1
+        }
     })
-    print(response.json())
-    print(auth)
+    print(respoonse.status_code)
+    print(respoonse.json())
+
+def ping_printers(printer, broke_printers, time, num_packets=2):
+    sent = 0
+    received = 0
+    lost = 0
+
+    for _ in range(num_packets):
+        packet = IP(dst=printer.get("IP")) / ICMP() / b"Ping personalizado!"
+        response = sr1(packet, timeout=2, verbose=0)
+        sent += 1
+        if response:
+            received += 1
+        else:
+            lost += 1
+
+    if lost == 0:
+        if printer in broke_printers:
+            broke_printers.remove(printer)
+    else:
+        if printer not in broke_printers:
+            printer["Horario"] = time
+            printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
+            broke_printers.append(printer)
+    
+    create_new_ticket(broke_printers)
+
+
+# Cauãzinho gameplays falta só formatar para o modelo do email o corpo do chamado
+
