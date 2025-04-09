@@ -46,44 +46,25 @@ def html_content(broke_printers):
     <html>
         <head>
             <meta http-equiv='Content-Type' content='text/html; charset=UTF-8'>
-            <style>
-                table {
-                    border-collapse: collapse;
-                    table-layout: fixed;
-                }
-                th, td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: left;
-                }
-                th {
-                    background-color: #f2f2f2;
-                    text-align: center;
-                }
-                pre {
-                    white-space: pre-wrap; /* Preserva a formatação do texto */
-                    font-family: Arial, sans-serif;
-                }
-            </style>
         </head>
         <body>
             <p><strong>Problemas com as seguintes impressoras:</strong></p>
-            <table>
+            <table style="border-collapse: collapse; table-layout: fixed; width: 100%;">
                 <tr>
-                    <th>Nome da Impressora</th>
-                    <th>IP</th>
-                    <th>Horário</th>
-                    <th>Problema</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Nome da Impressora</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">IP</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Horário</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Problema</th>
                 </tr>
     """
 
     for printer in broke_printers:
         table += f"""
-        <tr>
-            <td>{printer.get('Nome da Impressora')}</td>
-            <td>{printer.get('IP')}</td>
-            <td>{printer.get('Horario')}</td>
-            <td><pre>{printer.get('Problema')}</pre></td>
+        <tr style="background-color: #ffffff">
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Nome da Impressora')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('IP')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Horario')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left; white-space: pre-wrap; font-family: Arial, sans-serif;"><pre>{printer.get('Problema')}</pre></td>
         </tr>
         """
 
@@ -151,7 +132,7 @@ def create_new_ticket(body):
     respoonse = session.post(auth.glpi_api.requests.newTicket, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "Session-Token": token}, json={
         "input": {
             "name": "Problema com a impressora testando o MAGNA",
-            "content": html_content,
+            "content": html_content(body),
             "status": 2,
             "itilcategories_id": 128,
             "locations_id": 393,
@@ -183,7 +164,7 @@ def ping_printers(printer, broke_printers, time, num_packets=2):
             printer["Horario"] = time
             printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
             broke_printers.append(printer)
-    
+
     create_new_ticket(broke_printers)
 
 
