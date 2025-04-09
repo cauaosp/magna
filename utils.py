@@ -51,9 +51,9 @@ def html_content(broke_printers):
             <p><strong>Problemas com as seguintes impressoras:</strong></p>
             <table style="border-collapse: collapse; table-layout: fixed; width: 100%;">
                 <tr>
-                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Nome da Impressora</th>
-                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">IP</th>
-                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Horário</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center; width: 18rem">Nome da Impressora</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center; width: 6rem">IP</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center; width: 6rem">Horário</th>
                     <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2; text-align: center;">Problema</th>
                 </tr>
     """
@@ -62,8 +62,8 @@ def html_content(broke_printers):
         table += f"""
         <tr style="background-color: #ffffff">
             <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Nome da Impressora')}</td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('IP')}</td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Horario')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 6rem;">{printer.get('IP')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 6rem;">{printer.get('Horario')}</td>
             <td style="border: 1px solid #ddd; padding: 8px; text-align: left; white-space: pre-wrap; font-family: Arial, sans-serif;"><pre>{printer.get('Problema')}</pre></td>
         </tr>
         """
@@ -76,31 +76,45 @@ def html_content(broke_printers):
 
     return table
 
-def sender_email(message_body):
-    config = load_email_config()
-    print("Enviando E-mail ...")
-    try:
-        email_smtp_server = config["server"]
-        email_smtp_server_port = config["port"]
-        email_smtp_user = config["user"]
-        email_smtp_pass = config["pass"]
+def handle_ping(printer, time, broke_printers):
+    sent = 0
+    received = 0
+    lost = 0
 
-        msg = MIMEMultipart()
-        msg['From'] = email_smtp_user
-        msg['To'] = "ti@carmelhoteis.com.br"
-        msg['Subject'] = f"Problema com impressora"
-        body = email_body_formater(message_body)
-        msg.attach(MIMEText(body, 'html'))
+    for _ in range(2):
+        packet = IP(dst=printer.get("IP")) / ICMP() / b"Ping personalizado!"
+        response = sr1(packet, timeout=2, verbose=0)
+        sent += 1
+        if response:
+            received += 1
+        else:
+            lost += 1
 
-        server = smtplib.SMTP(email_smtp_server, email_smtp_server_port)
-        server.starttls()
-        server.login(email_smtp_user, email_smtp_pass)
-        server.sendmail(email_smtp_user, "ti@carmelhoteis.com.br", msg.as_string())
-        server.quit()
-    except Exception as e:
-        print(f"Ocorreu um erro ao tentar enviar o e-mail: {e}")
+    if lost == 0:
+        if printer in broke_printers:
+            broke_printers.remove(printer)
+    else:
+        if printer not in broke_printers:
+            printer["Horario"] = time
+            printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
+            broke_printers.append(printer)
+
+    print(broke_printers)
 
 def schedule_ping_for_printers(excel_list, broke_printers):
+    hourly_ticket_times = [
+        (datetime.strptime(f"{h:02d}:00", "%H:%M")).time()
+        for h in range(6, 24)  # De 06:00 até 23:00
+    ]
+
+    hourly_ticket_times = []
+    current_time = datetime.strptime("06:00", "%H:%M")
+    end_time = datetime.strptime("23:59", "%H:%M")
+    
+    while current_time <= end_time:
+        hourly_ticket_times.append(current_time.time())
+        current_time += timedelta(minutes=2)
+
     for printer in excel_list:
         start_time = printer["Horario Inicial"]
         end_time = printer["Horario Final"]
@@ -109,15 +123,21 @@ def schedule_ping_for_printers(excel_list, broke_printers):
             start_time = start_time.time()
         if isinstance(end_time, datetime):
             end_time = end_time.time()
-        
+
         current_time = start_time
-        printer_schedule = []
+
         while current_time <= end_time:
             time_str = current_time.strftime("%H:%M")
-            schedule.every().day.at(time_str).do(ping_printers, printer=printer, broke_printers=broke_printers, time=time_str)
+            schedule.every().day.at(time_str).do(handle_ping, printer=printer, broke_printers=broke_printers, time=time_str)
             print(f"Agendado para {printer['Nome da Impressora']} às {time_str}")
-
             current_time = (datetime.combine(datetime.today(), current_time) + timedelta(minutes=1)).time()
+
+    for time in hourly_ticket_times:
+        time_str = time.strftime("%H:%M")
+        schedule.every().day.at(time_str).do(
+            lambda: create_new_ticket(broke_printers)
+        )
+        print(f"Agendamento para criar ticket às {time_str}")
 
 def get_session_token():
     session = requests.Session()
@@ -141,32 +161,3 @@ def create_new_ticket(body):
     })
     print(respoonse.status_code)
     print(respoonse.json())
-
-def ping_printers(printer, broke_printers, time, num_packets=2):
-    sent = 0
-    received = 0
-    lost = 0
-
-    for _ in range(num_packets):
-        packet = IP(dst=printer.get("IP")) / ICMP() / b"Ping personalizado!"
-        response = sr1(packet, timeout=2, verbose=0)
-        sent += 1
-        if response:
-            received += 1
-        else:
-            lost += 1
-
-    if lost == 0:
-        if printer in broke_printers:
-            broke_printers.remove(printer)
-    else:
-        if printer not in broke_printers:
-            printer["Horario"] = time
-            printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
-            broke_printers.append(printer)
-
-    create_new_ticket(broke_printers)
-
-
-# Cauãzinho gameplays falta só formatar para o modelo do email o corpo do chamado
-
