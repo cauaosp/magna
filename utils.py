@@ -62,8 +62,8 @@ def html_content(broke_printers):
         table += f"""
         <tr style="background-color: #ffffff">
             <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Nome da Impressora')}</td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 6rem;">{printer.get('IP')}</td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 6rem;">{printer.get('Horario')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('IP')}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: left;">{printer.get('Horario')}</td>
             <td style="border: 1px solid #ddd; padding: 8px; text-align: left; white-space: pre-wrap; font-family: Arial, sans-serif;"><pre>{printer.get('Problema')}</pre></td>
         </tr>
         """
@@ -145,7 +145,7 @@ def get_session_token():
     response = session.get(auth.glpi_api.requests.newSession, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "User-Token": auth.glpi_api.userToken})
     return response.json()["session_token"]
 
-def create_new_ticket(body):
+def create_new_ticket(body, token):
     session = requests.Session()
     session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
     token = get_session_token()
@@ -161,3 +161,28 @@ def create_new_ticket(body):
     })
     print(respoonse.status_code)
     print(respoonse.json())
+
+def is_ticket_created():
+    session = requests.session()
+    session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
+    token = get_session_token()
+    respoonse = session.get(auth.glpi_api.requests.search + "?criteria[0][field]=7&criteria[0][searchtype]=equals&criteria[0][value]=128&criteria[1][link]=AND&criteria[1][field]=1&criteria[1][searchtype]=contains&criteria[1][value]=PingBot", headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "Session-Token": token})
+    print(respoonse.url)
+    print(respoonse.status_code)
+    print(respoonse.json())
+
+    data = respoonse.json().get("data")
+
+    if(data):
+        print("JÁ TEM CHAMADO, ADICIONA TAREFA NOVA!")
+        return True
+    else:
+        print("NÂO HÁ CHAMADO, CRIE UM NOVO!")
+        return False
+
+def handle_ticket_creation(ticket_body):
+    is_ticket_created()
+    if(is_ticket_created):
+        print("Função de adicionar tarefa!")
+    else:
+       create_new_ticket(ticket_body)
