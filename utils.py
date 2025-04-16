@@ -99,8 +99,6 @@ def handle_ping(printer, time, broke_printers):
             printer["Problema"] = f"Estatísticas do Ping de {get_if_addr(conf.iface.name)}  para {printer.get("IP")}:\nPacotes: Enviados = {sent}, Recebidos = {received}, Perdidos = {lost}\n{(lost / sent) * 100}% de perda"
             broke_printers.append(printer)
 
-    print(broke_printers)
-
 def schedule_ping_for_printers(excel_list, broke_printers):
     hourly_ticket_times = [
         (datetime.strptime(f"{h:02d}:00", "%H:%M")).time()
@@ -113,24 +111,29 @@ def schedule_ping_for_printers(excel_list, broke_printers):
     
     while current_time <= end_time:
         hourly_ticket_times.append(current_time.time())
-        current_time += timedelta(minutes=2)
+        current_time += timedelta(hours=1)
 
     for printer in excel_list:
         start_time = printer["Horario Inicial"]
         end_time = printer["Horario Final"]
 
         if isinstance(start_time, datetime):
-            start_time = start_time.time()
+            start_dt = start_time
+        else:
+            start_dt = datetime.combine(datetime.today(), start_time)
+
         if isinstance(end_time, datetime):
-            end_time = end_time.time()
+            end_dt = end_time
+        else:
+            end_dt = datetime.combine(datetime.today(), end_time)
 
-        current_time = start_time
+        current_time = start_dt
 
-        while current_time <= end_time:
+        while current_time <= end_dt:
             time_str = current_time.strftime("%H:%M")
             schedule.every().day.at(time_str).do(handle_ping, printer=printer, broke_printers=broke_printers, time=time_str)
             print(f"Agendado para {printer['Nome da Impressora']} às {time_str}")
-            current_time = (datetime.combine(datetime.today(), current_time) + timedelta(minutes=1)).time()
+            current_time += timedelta(hours=1)
 
     for time in hourly_ticket_times:
         time_str = time.strftime("%H:%M")
@@ -155,16 +158,13 @@ def end_session_token(token):
     else:
         print("Token inválido para encerrar!")
 
-
-
-
 def create_new_ticket(body):
     session = requests.Session()
     session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
     token = get_session_token()
     respoonse = session.post(auth.glpi_api.requests.newTicket, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "Session-Token": token}, json={
         "input": {
-            "name": "Problema com a impressora testando o MAGNA",
+            "name": "PingBot - Impressoras quebradas",
             "content": html_content(body),
             "status": 2,
             "itilcategories_id": 128,
@@ -181,11 +181,8 @@ def is_ticket_created():
     session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
     token = get_session_token()
     respoonse = session.get(auth.glpi_api.requests.search + "?criteria[0][field]=7&criteria[0][searchtype]=equals&criteria[0][value]=128&criteria[1][link]=AND&criteria[1][field]=1&criteria[1][searchtype]=contains&criteria[1][value]=PingBot", headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "Session-Token": token})
-    print(respoonse.url)
-    print(respoonse.status_code)
-    print(respoonse.json())
-
     data = respoonse.json().get("data")
+    end_session_token(token)
 
     if(data):
         print("JÁ TEM CHAMADO, ADICIONA TAREFA NOVA!")
@@ -194,13 +191,23 @@ def is_ticket_created():
         print("NÂO HÁ CHAMADO, CRIE UM NOVO!")
         return False
 
-def handle_ticket_creation(broke_printers):
-    is_ticket_created()
-    if(is_ticket_created):
-        create_task()
-        print("Função de adicionar tarefa!")
-    else:
-       create_new_ticket(broke_printers)
 
-def create_task():
-    print("Criando tarefa")
+def handle_ticket_creation(broke_printers):
+    if(len(broke_printers) == 0):
+        print("Não há impressoras quebradas!")
+    else:
+        print(f"Total de impressoras quebradas: {len(broke_printers)}")
+        if(is_ticket_created()):
+            create_task(broke_printers)
+        else:
+            create_new_ticket(broke_printers)
+
+def create_task(broke_printers):
+    print("\nProblemas com estas impressoras\n")
+    for printer in broke_printers:
+        nome = printer['Nome da Impressora']
+        ip = printer['IP']
+        horario = printer['Horario']
+        problema = printer['Problema']
+        print(f"{nome}\t{ip}\t{horario}")
+        print(problema + "\n")
