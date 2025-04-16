@@ -1,3 +1,3 @@
-from utils import is_ticket_created
+from utils import end_session_token
 
-is_ticket_created()
+end_session_token("irj5ftaqtf3kce9t3vut59cjv8")

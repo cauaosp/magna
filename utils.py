@@ -135,7 +135,7 @@ def schedule_ping_for_printers(excel_list, broke_printers):
     for time in hourly_ticket_times:
         time_str = time.strftime("%H:%M")
         schedule.every().day.at(time_str).do(
-            lambda: create_new_ticket(broke_printers)
+            lambda: handle_ticket_creation(broke_printers)
         )
         print(f"Agendamento para criar ticket às {time_str}")
 
@@ -145,7 +145,20 @@ def get_session_token():
     response = session.get(auth.glpi_api.requests.newSession, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "User-Token": auth.glpi_api.userToken})
     return response.json()["session_token"]
 
-def create_new_ticket(body, token):
+def end_session_token(token):
+    session = requests.Session()
+    session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
+    response = session.get(auth.glpi_api.requests.endSession, headers={"Content-Type": "application/json", "App-Token": auth.glpi_api.appToken, "User-Token": auth.glpi_api.userToken, "Session-Token": token})
+    print(response.json())
+    if(response.json() == True):
+        print("Token de sessão encerrado!")
+    else:
+        print("Token inválido para encerrar!")
+
+
+
+
+def create_new_ticket(body):
     session = requests.Session()
     session.auth = (auth.glpi_api.user.username, auth.glpi_api.user.password)
     token = get_session_token()
@@ -160,7 +173,8 @@ def create_new_ticket(body, token):
         }
     })
     print(respoonse.status_code)
-    print(respoonse.json())
+    print("Ticket criado!")
+    end_session_token(token)
 
 def is_ticket_created():
     session = requests.session()
@@ -180,9 +194,13 @@ def is_ticket_created():
         print("NÂO HÁ CHAMADO, CRIE UM NOVO!")
         return False
 
-def handle_ticket_creation(ticket_body):
+def handle_ticket_creation(broke_printers):
     is_ticket_created()
     if(is_ticket_created):
+        create_task()
         print("Função de adicionar tarefa!")
     else:
-       create_new_ticket(ticket_body)
+       create_new_ticket(broke_printers)
+
+def create_task():
+    print("Criando tarefa")
