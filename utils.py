@@ -1,11 +1,7 @@
-import smtplib
-import subprocess
 import openpyxl
 import json
 import schedule
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from scapy.all import IP, ICMP, sr1, conf, get_if_addr
 import requests
 from types import SimpleNamespace
@@ -100,11 +96,6 @@ def handle_ping(printer, time, broke_printers):
             broke_printers.append(printer)
 
 def schedule_ping_for_printers(excel_list, broke_printers):
-    hourly_ticket_times = [
-        (datetime.strptime(f"{h:02d}:00", "%H:%M")).time()
-        for h in range(6, 24)  # De 06:00 até 23:00
-    ]
-
     hourly_ticket_times = []
     current_time = datetime.strptime("06:00", "%H:%M")
     end_time = datetime.strptime("23:59", "%H:%M")
@@ -137,9 +128,7 @@ def schedule_ping_for_printers(excel_list, broke_printers):
 
     for time in hourly_ticket_times:
         time_str = time.strftime("%H:%M")
-        schedule.every().day.at(time_str).do(
-            lambda: handle_ticket_creation(broke_printers)
-        )
+        schedule.every().day.at(time_str).do(lambda printers=broke_printers: handle_ticket_creation(printers))
         print(f"Agendamento para criar ticket às {time_str}")
 
 def get_session_token():
